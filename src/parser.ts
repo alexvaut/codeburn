@@ -149,18 +149,21 @@ function groupIntoTurns(entries: JournalEntry[], seenMsgIds: Set<string>): Parse
 
   for (const entry of entries) {
     if (entry.type === 'user') {
-      if (currentCalls.length > 0) {
-        turns.push({
-          userMessage: currentUserMessage,
-          assistantCalls: currentCalls,
-          timestamp: currentTimestamp,
-          sessionId: currentSessionId,
-        })
+      const text = getUserMessageText(entry)
+      if (text.trim()) {
+        if (currentCalls.length > 0) {
+          turns.push({
+            userMessage: currentUserMessage,
+            assistantCalls: currentCalls,
+            timestamp: currentTimestamp,
+            sessionId: currentSessionId,
+          })
+        }
+        currentUserMessage = text
+        currentCalls = []
+        currentTimestamp = entry.timestamp ?? ''
+        currentSessionId = entry.sessionId ?? ''
       }
-      currentUserMessage = getUserMessageText(entry)
-      currentCalls = []
-      currentTimestamp = entry.timestamp ?? ''
-      currentSessionId = entry.sessionId ?? ''
     } else if (entry.type === 'assistant') {
       const msgId = getMessageId(entry)
       if (msgId && seenMsgIds.has(msgId)) continue
