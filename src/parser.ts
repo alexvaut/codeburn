@@ -208,10 +208,15 @@ function buildSessionSummary(
     const turnCost = turn.assistantCalls.reduce((s, c) => s + c.costUSD, 0)
 
     if (!categoryBreakdown[turn.category]) {
-      categoryBreakdown[turn.category] = { turns: 0, costUSD: 0 }
+      categoryBreakdown[turn.category] = { turns: 0, costUSD: 0, retries: 0, editTurns: 0, oneShotTurns: 0 }
     }
     categoryBreakdown[turn.category].turns++
     categoryBreakdown[turn.category].costUSD += turnCost
+    if (turn.hasEdits) {
+      categoryBreakdown[turn.category].editTurns++
+      categoryBreakdown[turn.category].retries += turn.retries
+      if (turn.retries === 0) categoryBreakdown[turn.category].oneShotTurns++
+    }
 
     for (const call of turn.assistantCalls) {
       totalCost += call.costUSD

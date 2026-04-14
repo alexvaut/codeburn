@@ -92,6 +92,8 @@ export type TaskCategory =
 
 export type ClassifiedTurn = ParsedTurn & {
   category: TaskCategory
+  retries: number
+  hasEdits: boolean
 }
 
 export type SessionSummary = {
@@ -109,7 +111,7 @@ export type SessionSummary = {
   modelBreakdown: Record<string, { calls: number; costUSD: number; tokens: TokenUsage }>
   toolBreakdown: Record<string, { calls: number }>
   mcpBreakdown: Record<string, { calls: number }>
-  categoryBreakdown: Record<TaskCategory, { turns: number; costUSD: number }>
+  categoryBreakdown: Record<TaskCategory, { turns: number; costUSD: number; retries: number; editTurns: number; oneShotTurns: number }>
 }
 
 export type ProjectSummary = {

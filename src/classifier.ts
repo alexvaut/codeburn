@@ -110,6 +110,32 @@ function classifyConversation(userMessage: string): TaskCategory {
   return 'conversation'
 }
 
+function countRetries(turn: ParsedTurn): number {
+  let sawEditBeforeBash = false
+  let sawBashAfterEdit = false
+  let retries = 0
+
+  for (const call of turn.assistantCalls) {
+    const hasEdit = call.tools.some(t => EDIT_TOOLS.has(t))
+    const hasBash = call.tools.some(t => BASH_TOOLS.has(t))
+
+    if (hasEdit) {
+      if (sawBashAfterEdit) retries++
+      sawEditBeforeBash = true
+      sawBashAfterEdit = false
+    }
+    if (hasBash && sawEditBeforeBash) {
+      sawBashAfterEdit = true
+    }
+  }
+
+  return retries
+}
+
+function turnHasEdits(turn: ParsedTurn): boolean {
+  return turn.assistantCalls.some(c => c.tools.some(t => EDIT_TOOLS.has(t)))
+}
+
 export function classifyTurn(turn: ParsedTurn): ClassifiedTurn {
   const tools = getAllTools(turn)
 
@@ -126,5 +152,5 @@ export function classifyTurn(turn: ParsedTurn): ClassifiedTurn {
     }
   }
 
-  return { ...turn, category }
+  return { ...turn, category, retries: countRetries(turn), hasEdits: turnHasEdits(turn) }
 }

@@ -55,7 +55,7 @@ export type PeriodData = {
   outputTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
-  categories: Array<{ name: string; cost: number; turns: number }>
+  categories: Array<{ name: string; cost: number; turns: number; editTurns: number; oneShotTurns: number }>
   models: Array<{ name: string; cost: number; calls: number }>
 }
 

@@ -17,7 +17,7 @@
   <img src="https://cdn.jsdelivr.net/gh/AgentSeal/codeburn@main/assets/dashboard.jpg" alt="CodeBurn TUI dashboard" width="620" />
 </p>
 
-By task type, tool, model, MCP server, and project. Interactive TUI dashboard with gradient charts, responsive panels, and keyboard navigation. macOS menu bar widget via SwiftBar. CSV/JSON export.
+By task type, tool, model, MCP server, and project. Tracks one-shot success rate per activity type so you can see where the AI nails it first try vs. burns tokens on edit/test/fix retries. Interactive TUI dashboard with gradient charts, responsive panels, and keyboard navigation. macOS menu bar widget via SwiftBar. CSV/JSON export.
 
 Works by reading Claude Code session transcripts directly from disk. No wrapper, no proxy, no API keys. Pricing from LiteLLM (auto-cached, all models supported).
 
@@ -84,7 +84,9 @@ Requires [SwiftBar](https://github.com/swiftbar/SwiftBar) (`brew install --cask 
 | Conversation | No tools, pure text exchange |
 | General | Skill tool, uncategorized |
 
-**Breakdowns**: daily cost chart, per-project, per-model (Opus/Sonnet/Haiku/GPT-4o/Gemini), per-activity, core tools, MCP servers.
+**Breakdowns**: daily cost chart, per-project, per-model (Opus/Sonnet/Haiku/GPT-4o/Gemini), per-activity with one-shot rate, core tools, MCP servers.
+
+**One-shot rate**: For categories that involve code edits, CodeBurn detects edit/test/fix retry cycles (Edit -> Bash -> Edit patterns). The 1-shot column shows the percentage of edit turns that succeeded without retries. Coding at 90% means the AI got it right first try 9 out of 10 times.
 
 **Pricing**: Fetched from [LiteLLM](https://github.com/BerriAI/litellm) model prices (auto-cached 24h at `~/.cache/codeburn/`). Handles input, output, cache write, cache read, and web search costs. Fast mode multiplier for Claude. Fallback to hardcoded prices if fetch fails.
 

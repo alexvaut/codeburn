@@ -26,5 +26,7 @@
 
 ## Git
 - Commits from: AgentSeal <hello@agentseal.org>
+- NEVER add Co-Authored-By lines
+- NEVER include personal names or usernames in commits
 - Small, focused commits. One feature per commit
 - Test locally before every commit

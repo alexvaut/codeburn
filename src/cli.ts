@@ -60,7 +60,7 @@ program
 
 function buildPeriodData(label: string, projects: ProjectSummary[]): PeriodData {
   const sessions = projects.flatMap(p => p.sessions)
-  const catTotals: Record<string, { turns: number; cost: number }> = {}
+  const catTotals: Record<string, { turns: number; cost: number; editTurns: number; oneShotTurns: number }> = {}
   const modelTotals: Record<string, { calls: number; cost: number }> = {}
   let inputTokens = 0, outputTokens = 0, cacheReadTokens = 0, cacheWriteTokens = 0
 
@@ -70,9 +70,11 @@ function buildPeriodData(label: string, projects: ProjectSummary[]): PeriodData 
     cacheReadTokens += sess.totalCacheReadTokens
     cacheWriteTokens += sess.totalCacheWriteTokens
     for (const [cat, d] of Object.entries(sess.categoryBreakdown)) {
-      if (!catTotals[cat]) catTotals[cat] = { turns: 0, cost: 0 }
+      if (!catTotals[cat]) catTotals[cat] = { turns: 0, cost: 0, editTurns: 0, oneShotTurns: 0 }
       catTotals[cat].turns += d.turns
       catTotals[cat].cost += d.costUSD
+      catTotals[cat].editTurns += d.editTurns
+      catTotals[cat].oneShotTurns += d.oneShotTurns
     }
     for (const [model, d] of Object.entries(sess.modelBreakdown)) {
       if (!modelTotals[model]) modelTotals[model] = { calls: 0, cost: 0 }
