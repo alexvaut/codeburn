@@ -159,7 +159,7 @@ export function renderMenubarFormat(
   lines.push(`Export CSV to Desktop | terminal=false shell=${bin} param1=export param2=-o param3=${home}/Desktop/codeburn-report.csv`)
 
   // Currency submenu -- common currencies as clickable items.
-  // Clicking one runs 'codeburn config currency XXX' and refreshes the plugin.
+  // Clicking one runs 'codeburn currency XXX' and refreshes the plugin.
   const activeCurrency = getCurrency().code
   const currencies = [
     { code: 'USD', name: 'US Dollar' },
