@@ -1,13 +1,19 @@
 mod cli;
 mod config;
 mod fx;
+#[cfg(target_os = "linux")]
+mod tray_linux;
 
 use std::sync::Mutex;
 
+use tauri::{AppHandle, Emitter, Manager, WindowEvent};
+#[cfg(target_os = "linux")]
+use tauri::Listener;
+
+#[cfg(not(target_os = "linux"))]
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, WindowEvent,
 };
 
 use crate::cli::CodeburnCli;
@@ -22,6 +28,8 @@ pub struct AppState {
     pub cli: Mutex<CodeburnCli>,
     pub config: Mutex<CurrencyConfig>,
     pub fx: FxCache,
+    #[cfg(target_os = "linux")]
+    pub linux_tray: tray_linux::LinuxTrayHandle,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -30,16 +38,24 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            #[cfg(target_os = "linux")]
+            let linux_tray = tray_linux::LinuxTrayHandle::empty();
+
             let state = AppState {
                 cli: Mutex::new(CodeburnCli::resolve()),
                 config: Mutex::new(CurrencyConfig::load_or_default()),
                 fx: FxCache::new(),
+                #[cfg(target_os = "linux")]
+                linux_tray: linux_tray.clone(),
             };
             app.manage(state);
 
-            build_tray(app.handle())?;
+            #[cfg(not(target_os = "linux"))]
+            build_tray_tauri(app.handle())?;
 
-            // Hide the popover window on launch; the tray icon click toggles it.
+            #[cfg(target_os = "linux")]
+            init_tray_linux(app.handle().clone(), linux_tray);
+
             if let Some(window) = app.get_webview_window("popover") {
                 let _ = window.hide();
             }
@@ -49,7 +65,8 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 // Keep the popover alive between clicks. Hiding avoids spawn cost + preserves
-                // scroll position + in-flight data. User exits via the tray menu instead.
+                // scroll position + in-flight data. User exits via the in-popover quit button
+                // or (on non-Linux) the tray menu.
                 api.prevent_close();
                 let _ = window.hide();
             }
@@ -58,17 +75,19 @@ pub fn run() {
             commands::fetch_payload,
             commands::set_currency,
             commands::open_terminal_command,
+            commands::set_tray_title,
+            commands::quit_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
 
-fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let dashboard = MenuItem::with_id(app, "dashboard", "Show Dashboard", true, None::<&str>)?;
+#[cfg(not(target_os = "linux"))]
+fn build_tray_tauri(app: &AppHandle) -> tauri::Result<()> {
     let refresh = MenuItem::with_id(app, "refresh", "Refresh", true, None::<&str>)?;
     let report = MenuItem::with_id(app, "report", "Open Full Report", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit CodeBurn", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&dashboard, &refresh, &report, &quit])?;
+    let menu = Menu::with_items(app, &[&refresh, &report, &quit])?;
 
     TrayIconBuilder::with_id("codeburn-tray")
         .tooltip("CodeBurn")
@@ -76,10 +95,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "quit" => app.exit(0),
-            "dashboard" => toggle_popover(app),
             "refresh" => {
-                // Nudge the webview so it re-requests the payload. The front-end listens for
-                // this event and kicks off a new fetch_payload command.
                 if let Some(window) = app.get_webview_window("popover") {
                     let _ = window.emit("codeburn://refresh", ());
                 }
@@ -96,7 +112,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 ..
             } = event
             {
-                toggle_popover(tray.app_handle());
+                toggle_popover(tray.app_handle(), None);
             }
         })
         .build(app)?;
@@ -104,43 +120,94 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-fn toggle_popover(app: &AppHandle) {
+#[cfg(target_os = "linux")]
+fn init_tray_linux(app: AppHandle, handle: tray_linux::LinuxTrayHandle) {
+    // Spawn the SNI tray on the Tokio runtime that Tauri already owns.
+    let spawn_app = app.clone();
+    let spawn_handle = handle.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(err) = tray_linux::spawn(spawn_app, spawn_handle).await {
+            eprintln!("codeburn: failed to spawn Linux tray: {err}");
+        }
+    });
+
+    // Left-click on the tray: show popover anchored to the click coordinates.
+    let activate_app = app.clone();
+    app.listen_any("codeburn://tray-activate", move |event| {
+        let anchor = parse_click(event.payload());
+        toggle_popover(&activate_app, anchor);
+    });
+
+    // Right-click / middle-click: same as left for now. Quit lives in the popover footer.
+    let secondary_app = app.clone();
+    app.listen_any("codeburn://tray-secondary", move |event| {
+        let anchor = parse_click(event.payload());
+        toggle_popover(&secondary_app, anchor);
+    });
+}
+
+#[cfg(target_os = "linux")]
+fn parse_click(payload: &str) -> Option<(i32, i32)> {
+    let value: serde_json::Value = serde_json::from_str(payload).ok()?;
+    let x = value.get("x")?.as_i64()? as i32;
+    let y = value.get("y")?.as_i64()? as i32;
+    Some((x, y))
+}
+
+/// Show or hide the popover. When `anchor` is `Some((x, y))`, position the popover
+/// centered horizontally on the click and just below it (Linux path, anchored to the
+/// StatusNotifier Activate coordinates). When `None`, snap it to the top-right of the
+/// primary monitor (non-Linux fallback + menu-driven invocations).
+fn toggle_popover(app: &AppHandle, anchor: Option<(i32, i32)>) {
     let Some(window) = app.get_webview_window("popover") else {
         return;
     };
-    match window.is_visible() {
-        Ok(true) => {
-            let _ = window.hide();
-        }
-        _ => {
-            position_popover_top_right(&window);
-            let _ = window.show();
-            let _ = window.set_focus();
-        }
+    if window.is_visible().unwrap_or(false) {
+        let _ = window.hide();
+        return;
     }
+    position_popover(&window, anchor);
+    let _ = window.show();
+    let _ = window.set_focus();
 }
 
-/// Snap the popover to the top-right of the primary monitor, just below the GNOME
-/// top panel. Linux window managers generally ignore the tray icon's screen position,
-/// so there is no reliable anchor to attach to. Top-right keeps the window visually
-/// close to the StatusNotifier area on every desktop we target (GNOME, KDE, Unity).
-fn position_popover_top_right(window: &tauri::WebviewWindow) {
-    // Matches desktop/src-tauri/tauri.conf.json popover width (logical pixels).
+fn position_popover(window: &tauri::WebviewWindow, anchor: Option<(i32, i32)>) {
+    // Matches desktop/src-tauri/tauri.conf.json popover dimensions (logical pixels).
     const POPOVER_WIDTH_LOGICAL: f64 = 360.0;
-    const MARGIN_LOGICAL: f64 = 12.0;
+    const POPOVER_HEIGHT_LOGICAL: f64 = 660.0;
+    const MARGIN_LOGICAL: f64 = 8.0;
     const TOP_PANEL_LOGICAL: f64 = 36.0;
 
     let Ok(Some(monitor)) = window.primary_monitor() else {
         return;
     };
     let scale = monitor.scale_factor();
-    let popover_w = (POPOVER_WIDTH_LOGICAL * scale) as u32;
-    let margin = (MARGIN_LOGICAL * scale) as u32;
-    let panel = (TOP_PANEL_LOGICAL * scale) as u32;
     let screen = monitor.size();
-    let x = screen.width.saturating_sub(popover_w).saturating_sub(margin);
-    let y = panel;
-    let _ = window.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
+    let pop_w = (POPOVER_WIDTH_LOGICAL * scale) as i32;
+    let pop_h = (POPOVER_HEIGHT_LOGICAL * scale) as i32;
+    let margin = (MARGIN_LOGICAL * scale) as i32;
+    let panel = (TOP_PANEL_LOGICAL * scale) as i32;
+    let screen_w = screen.width as i32;
+    let screen_h = screen.height as i32;
+
+    let (x, y) = match anchor {
+        Some((click_x, click_y)) => {
+            // Center horizontally on the click, drop the popover just below it. Clamp to
+            // the screen so it doesn't fall off the edge on multi-monitor setups.
+            let desired_x = click_x - pop_w / 2;
+            let max_x = (screen_w - pop_w - margin).max(margin);
+            let clamped_x = desired_x.clamp(margin, max_x);
+            let max_y = (screen_h - pop_h - margin).max(margin);
+            let clamped_y = (click_y + margin).clamp(margin, max_y);
+            (clamped_x, clamped_y)
+        }
+        None => {
+            let x = (screen_w - pop_w - margin).max(0);
+            (x, panel)
+        }
+    };
+
+    let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
 }
 
 mod commands {
@@ -181,5 +248,33 @@ mod commands {
     pub fn open_terminal_command(app: AppHandle, args: Vec<String>) -> Result<(), String> {
         let args: Vec<&str> = args.iter().map(String::as_str).collect();
         crate::cli::spawn_in_terminal(&app, &args).map_err(|e| e.to_string())
+    }
+
+    /// Update the text shown next to the tray icon (e.g. "🔥 $24.73"). On Linux this uses
+    /// the SNI `title` field that AppIndicator hosts render beside the icon. On other
+    /// platforms it sets the TrayIcon title/tooltip. Called from the frontend after each
+    /// payload fetch so the ambient number stays fresh.
+    #[tauri::command]
+    pub async fn set_tray_title(
+        _app: AppHandle,
+        title: String,
+        _state: State<'_, AppState>,
+    ) -> Result<(), String> {
+        #[cfg(target_os = "linux")]
+        {
+            _state.linux_tray.set_title(title).await;
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            if let Some(tray) = _app.tray_by_id("codeburn-tray") {
+                let _ = tray.set_title(Some(title));
+            }
+        }
+        Ok(())
+    }
+
+    #[tauri::command]
+    pub fn quit_app(app: AppHandle) {
+        app.exit(0);
     }
 }

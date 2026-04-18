@@ -40,12 +40,17 @@ export function App() {
         includeOptimize,
       })
       setPayload(json)
+      // Push the hero cost to the tray label so the ambient number next to the icon
+      // (Linux SNI title / Win tray title) matches what the popover shows.
+      invoke('set_tray_title', {
+        title: formatCompactCurrency(json.current.cost, currency),
+      }).catch(() => {})
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
     }
-  }, [period, provider])
+  }, [period, provider, currency])
 
   // Initial + interval refresh
   useEffect(() => {
@@ -183,6 +188,7 @@ export function App() {
           {loading ? '...' : 'Refresh'}
         </button>
         <button className="report" onClick={openFullReport}>Open Full Report</button>
+        <button className="quit" onClick={() => invoke('quit_app').catch(console.error)} title="Quit CodeBurn">×</button>
       </footer>
 
       {error && <div className="error-toast">{error}</div>}

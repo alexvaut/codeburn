@@ -217,6 +217,17 @@ html, body, #root {
   padding: 6px 10px;
   cursor: pointer;
 }
+.quit {
+  background: rgba(0, 0, 0, 0.04);
+  border: 0;
+  border-radius: var(--radius-md);
+  padding: 5px 9px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+.quit:hover { background: rgba(0, 0, 0, 0.08); color: var(--text-primary); }
 
 .error-toast {
   position: fixed;
