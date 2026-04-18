@@ -35,10 +35,9 @@
 .codeburn-section-title {
     font-weight: 600;
     font-size: 11px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
     opacity: 0.6;
     padding-top: 4px;
+    padding-bottom: 2px;
 }
 
 .codeburn-row {
