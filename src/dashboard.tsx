@@ -664,14 +664,16 @@ function InteractiveDashboard({ initialProjects, initialPeriod, initialProvider,
 
   const switchPeriod = useCallback((np: Period) => {
     if (np === period) return
-    setPeriod(np); setView('dashboard')
+    setPeriod(np)
+    setView(v => v === 'compare' ? v : 'dashboard')
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => { reloadData(np, activeProvider) }, 600)
   }, [period, activeProvider, reloadData])
 
   const switchPeriodImmediate = useCallback(async (np: Period) => {
     if (np === period) return
-    setPeriod(np); setView('dashboard')
+    setPeriod(np)
+    setView(v => v === 'compare' ? v : 'dashboard')
     if (debounceRef.current) clearTimeout(debounceRef.current)
     await reloadData(np, activeProvider)
   }, [period, activeProvider, reloadData])
@@ -679,17 +681,17 @@ function InteractiveDashboard({ initialProjects, initialPeriod, initialProvider,
   useInput((input, key) => {
     if (input === 'q') { exit(); return }
     if (input === 'o' && findingCount > 0 && view === 'dashboard' && optimizeAvailable) { setView('optimize'); return }
-    if ((input === 'b' || key.escape) && (view === 'optimize' || view === 'compare')) { setView('dashboard'); return }
+    if ((input === 'b' || key.escape) && view === 'optimize') { setView('dashboard'); return }
     if (input === 'c' && compareAvailable && view === 'dashboard') { setView('compare'); return }
-    if (input === 'p' && multipleProviders) {
+    if (input === 'p' && multipleProviders && view !== 'compare') {
       const opts = ['all', ...detectedProviders]; const next = opts[(opts.indexOf(activeProvider) + 1) % opts.length]
       setActiveProvider(next); setView('dashboard')
       if (debounceRef.current) clearTimeout(debounceRef.current)
       reloadData(period, next); return
     }
     const idx = PERIODS.indexOf(period)
-    if (key.leftArrow && view === 'dashboard') switchPeriod(PERIODS[(idx - 1 + PERIODS.length) % PERIODS.length])
-    else if ((key.rightArrow || key.tab) && view === 'dashboard') switchPeriod(PERIODS[(idx + 1) % PERIODS.length])
+    if (key.leftArrow && view !== 'optimize') switchPeriod(PERIODS[(idx - 1 + PERIODS.length) % PERIODS.length]!)
+    else if ((key.rightArrow || key.tab) && view !== 'optimize') switchPeriod(PERIODS[(idx + 1) % PERIODS.length]!)
     else if (input === '1') switchPeriodImmediate('today')
     else if (input === '2') switchPeriodImmediate('week')
     else if (input === '3') switchPeriodImmediate('30days')
@@ -715,7 +717,7 @@ function InteractiveDashboard({ initialProjects, initialPeriod, initialProvider,
         : view === 'optimize' && optimizeResult
           ? <OptimizeView findings={optimizeResult.findings} costRate={optimizeResult.costRate} projects={projects} label={PERIOD_LABELS[period]} width={dashWidth} healthScore={optimizeResult.healthScore} healthGrade={optimizeResult.healthGrade} />
           : <DashboardContent projects={projects} period={period} columns={columns} activeProvider={activeProvider} budgets={projectBudgets} />}
-      <StatusBar width={dashWidth} showProvider={multipleProviders && view !== 'compare'} view={view} findingCount={findingCount} optimizeAvailable={optimizeAvailable} compareAvailable={compareAvailable} />
+      {view !== 'compare' && <StatusBar width={dashWidth} showProvider={multipleProviders} view={view} findingCount={findingCount} optimizeAvailable={optimizeAvailable} compareAvailable={compareAvailable} />}
     </Box>
   )
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { render, Box, Text, useInput, useApp } from 'ink'
 
 import type { ModelStats, ComparisonRow } from './compare-stats.js'
@@ -210,10 +210,62 @@ type CompareViewProps = {
 export function CompareView({ projects, onBack }: CompareViewProps) {
   const { exit } = useApp()
   const [phase, setPhase] = useState<'select' | 'loading' | 'results'>('select')
-  const [models] = useState(() => aggregateModelStats(projects))
+  const [models, setModels] = useState<ModelStats[]>(() => aggregateModelStats(projects))
+  const [pickedNames, setPickedNames] = useState<[string, string] | null>(null)
   const [selectedA, setSelectedA] = useState<ModelStats | null>(null)
   const [selectedB, setSelectedB] = useState<ModelStats | null>(null)
   const [rows, setRows] = useState<ComparisonRow[]>([])
+  const [loadTrigger, setLoadTrigger] = useState(0)
+  const projectsRef = useRef(projects)
+  projectsRef.current = projects
+
+  useEffect(() => {
+    const newModels = aggregateModelStats(projects)
+    setModels(newModels)
+
+    if (pickedNames) {
+      const hasA = newModels.some(m => m.model === pickedNames[0])
+      const hasB = newModels.some(m => m.model === pickedNames[1])
+      if (hasA && hasB) {
+        setLoadTrigger(t => t + 1)
+      } else {
+        setPickedNames(null)
+        setPhase('select')
+      }
+    }
+  }, [projects])
+
+  useEffect(() => {
+    if (loadTrigger === 0 || !pickedNames) return
+    let cancelled = false
+    setPhase('loading')
+
+    const currentModels = aggregateModelStats(projectsRef.current)
+    const a = currentModels.find(m => m.model === pickedNames[0])
+    const b = currentModels.find(m => m.model === pickedNames[1])
+    if (!a || !b) { setPhase('select'); return }
+
+    async function run() {
+      const providers = await getAllProviders()
+      const dirs: string[] = []
+      for (const p of providers) {
+        const sessions = await p.discoverSessions()
+        for (const s of sessions) dirs.push(s.path)
+      }
+      const corrections = await scanSelfCorrections(dirs)
+      if (cancelled) return
+
+      const aCopy = { ...a!, selfCorrections: corrections.get(a!.model) ?? 0 }
+      const bCopy = { ...b!, selfCorrections: corrections.get(b!.model) ?? 0 }
+      setSelectedA(aCopy)
+      setSelectedB(bCopy)
+      setRows(computeComparison(aCopy, bCopy))
+      setPhase('results')
+    }
+
+    run()
+    return () => { cancelled = true }
+  }, [loadTrigger])
 
   useInput((input, key) => {
     if (phase !== 'select') return
@@ -240,25 +292,9 @@ export function CompareView({ projects, onBack }: CompareViewProps) {
     )
   }
 
-  const handleSelect = async (a: ModelStats, b: ModelStats) => {
-    setPhase('loading')
-
-    const providers = await getAllProviders()
-    const dirs: string[] = []
-    for (const p of providers) {
-      const sessions = await p.discoverSessions()
-      for (const s of sessions) dirs.push(s.path)
-    }
-
-    const corrections = await scanSelfCorrections(dirs)
-    const aCopy = { ...a, selfCorrections: corrections.get(a.model) ?? 0 }
-    const bCopy = { ...b, selfCorrections: corrections.get(b.model) ?? 0 }
-
-    const comparisonRows = computeComparison(aCopy, bCopy)
-    setSelectedA(aCopy)
-    setSelectedB(bCopy)
-    setRows(comparisonRows)
-    setPhase('results')
+  const handleSelect = (a: ModelStats, b: ModelStats) => {
+    setPickedNames([a.model, b.model])
+    setLoadTrigger(t => t + 1)
   }
 
   if (phase === 'loading') {
