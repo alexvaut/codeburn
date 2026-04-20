@@ -33,11 +33,8 @@ export async function readConfig(): Promise<CodeburnConfig> {
   try {
     const raw = await readFile(getConfigPath(), 'utf-8')
     return JSON.parse(raw) as CodeburnConfig
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return {}
-    }
-    throw error
+  } catch {
+    return {}
   }
 }
 
