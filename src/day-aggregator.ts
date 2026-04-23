@@ -6,6 +6,7 @@ function emptyEntry(date: string): DailyEntry {
   return {
     date,
     cost: 0,
+    cacheReadCost: 0,
     calls: 0,
     sessions: 0,
     inputTokens: 0,
@@ -46,13 +47,15 @@ export function aggregateProjectsIntoDays(projects: ProjectSummary[]): DailyEntr
         const editTurns = turn.hasEdits ? 1 : 0
         const oneShotTurns = turn.hasEdits && turn.retries === 0 ? 1 : 0
         const turnCost = turn.assistantCalls.reduce((s, c) => s + c.costUSD, 0)
+        const turnCacheReadCost = turn.assistantCalls.reduce((s, c) => s + c.cacheReadCostUSD, 0)
 
         turnDay.editTurns += editTurns
         turnDay.oneShotTurns += oneShotTurns
 
-        const cat = turnDay.categories[turn.category] ?? { turns: 0, cost: 0, editTurns: 0, oneShotTurns: 0 }
+        const cat = turnDay.categories[turn.category] ?? { turns: 0, cost: 0, cacheReadCost: 0, editTurns: 0, oneShotTurns: 0 }
         cat.turns += 1
         cat.cost += turnCost
+        cat.cacheReadCost += turnCacheReadCost
         cat.editTurns += editTurns
         cat.oneShotTurns += oneShotTurns
         turnDay.categories[turn.category] = cat
@@ -62,6 +65,7 @@ export function aggregateProjectsIntoDays(projects: ProjectSummary[]): DailyEntr
           const callDay = ensure(callDate)
 
           callDay.cost += call.costUSD
+          callDay.cacheReadCost += call.cacheReadCostUSD
           callDay.calls += 1
           callDay.inputTokens += call.usage.inputTokens
           callDay.outputTokens += call.usage.outputTokens
@@ -69,21 +73,23 @@ export function aggregateProjectsIntoDays(projects: ProjectSummary[]): DailyEntr
           callDay.cacheWriteTokens += call.usage.cacheCreationInputTokens
 
           const model = callDay.models[call.model] ?? {
-            calls: 0, cost: 0,
+            calls: 0, cost: 0, cacheReadCost: 0,
             inputTokens: 0, outputTokens: 0,
             cacheReadTokens: 0, cacheWriteTokens: 0,
           }
           model.calls += 1
           model.cost += call.costUSD
+          model.cacheReadCost += call.cacheReadCostUSD
           model.inputTokens += call.usage.inputTokens
           model.outputTokens += call.usage.outputTokens
           model.cacheReadTokens += call.usage.cacheReadInputTokens
           model.cacheWriteTokens += call.usage.cacheCreationInputTokens
           callDay.models[call.model] = model
 
-          const provider = callDay.providers[call.provider] ?? { calls: 0, cost: 0 }
+          const provider = callDay.providers[call.provider] ?? { calls: 0, cost: 0, cacheReadCost: 0 }
           provider.calls += 1
           provider.cost += call.costUSD
+          provider.cacheReadCost += call.cacheReadCostUSD
           callDay.providers[call.provider] = provider
         }
       }
@@ -94,13 +100,14 @@ export function aggregateProjectsIntoDays(projects: ProjectSummary[]): DailyEntr
 }
 
 export function buildPeriodDataFromDays(days: DailyEntry[], label: string): PeriodData {
-  let cost = 0, calls = 0, sessions = 0
+  let cost = 0, cacheReadCost = 0, calls = 0, sessions = 0
   let inputTokens = 0, outputTokens = 0, cacheReadTokens = 0, cacheWriteTokens = 0
-  const catTotals: Record<string, { turns: number; cost: number; editTurns: number; oneShotTurns: number }> = {}
-  const modelTotals: Record<string, { calls: number; cost: number }> = {}
+  const catTotals: Record<string, { turns: number; cost: number; cacheReadCost: number; editTurns: number; oneShotTurns: number }> = {}
+  const modelTotals: Record<string, { calls: number; cost: number; cacheReadCost: number }> = {}
 
   for (const d of days) {
     cost += d.cost
+    cacheReadCost += d.cacheReadCost ?? 0
     calls += d.calls
     sessions += d.sessions
     inputTokens += d.inputTokens
@@ -109,15 +116,17 @@ export function buildPeriodDataFromDays(days: DailyEntry[], label: string): Peri
     cacheWriteTokens += d.cacheWriteTokens
 
     for (const [name, m] of Object.entries(d.models)) {
-      const acc = modelTotals[name] ?? { calls: 0, cost: 0 }
+      const acc = modelTotals[name] ?? { calls: 0, cost: 0, cacheReadCost: 0 }
       acc.calls += m.calls
       acc.cost += m.cost
+      acc.cacheReadCost += m.cacheReadCost ?? 0
       modelTotals[name] = acc
     }
     for (const [cat, c] of Object.entries(d.categories)) {
-      const acc = catTotals[cat] ?? { turns: 0, cost: 0, editTurns: 0, oneShotTurns: 0 }
+      const acc = catTotals[cat] ?? { turns: 0, cost: 0, cacheReadCost: 0, editTurns: 0, oneShotTurns: 0 }
       acc.turns += c.turns
       acc.cost += c.cost
+      acc.cacheReadCost += c.cacheReadCost ?? 0
       acc.editTurns += c.editTurns
       acc.oneShotTurns += c.oneShotTurns
       catTotals[cat] = acc
@@ -127,6 +136,7 @@ export function buildPeriodDataFromDays(days: DailyEntry[], label: string): Peri
   return {
     label,
     cost,
+    cacheReadCost,
     calls,
     sessions,
     inputTokens,

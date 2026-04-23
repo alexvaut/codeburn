@@ -70,6 +70,7 @@ export type ParsedApiCall = {
   model: string
   usage: TokenUsage
   costUSD: number
+  cacheReadCostUSD: number
   tools: string[]
   mcpTools: string[]
   hasAgentSpawn: boolean
@@ -107,17 +108,18 @@ export type SessionSummary = {
   firstTimestamp: string
   lastTimestamp: string
   totalCostUSD: number
+  totalCacheReadCostUSD: number
   totalInputTokens: number
   totalOutputTokens: number
   totalCacheReadTokens: number
   totalCacheWriteTokens: number
   apiCalls: number
   turns: ClassifiedTurn[]
-  modelBreakdown: Record<string, { calls: number; costUSD: number; tokens: TokenUsage }>
+  modelBreakdown: Record<string, { calls: number; costUSD: number; cacheReadCostUSD: number; tokens: TokenUsage }>
   toolBreakdown: Record<string, { calls: number }>
   mcpBreakdown: Record<string, { calls: number }>
   bashBreakdown: Record<string, { calls: number }>
-  categoryBreakdown: Record<TaskCategory, { turns: number; costUSD: number; retries: number; editTurns: number; oneShotTurns: number }>
+  categoryBreakdown: Record<TaskCategory, { turns: number; costUSD: number; cacheReadCostUSD: number; retries: number; editTurns: number; oneShotTurns: number }>
 }
 
 export type ProjectSummary = {
@@ -125,6 +127,7 @@ export type ProjectSummary = {
   projectPath: string
   sessions: SessionSummary[]
   totalCostUSD: number
+  totalCacheReadCostUSD: number
   totalApiCalls: number
 }
 

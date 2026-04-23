@@ -8,6 +8,7 @@ function makeProject(overrides: Partial<ProjectSummary> & { sessions: ProjectSum
     project: 'p',
     projectPath: '/p',
     totalCostUSD: overrides.sessions.reduce((s, sess) => s + sess.totalCostUSD, 0),
+    totalCacheReadCostUSD: overrides.sessions.reduce((s, sess) => s + sess.totalCacheReadCostUSD, 0),
     totalApiCalls: overrides.sessions.reduce((s, sess) => s + sess.apiCalls, 0),
     ...overrides,
   }
@@ -27,6 +28,7 @@ function makeCall(timestamp: string, costUSD: number, model = 'Opus 4.7', provid
       webSearchRequests: 0,
     },
     costUSD,
+    cacheReadCostUSD: 0,
     tools: [],
     mcpTools: [],
     hasAgentSpawn: false,
@@ -48,6 +50,7 @@ describe('aggregateProjectsIntoDays', () => {
           firstTimestamp: '2026-04-09T10:00:00Z',
           lastTimestamp: '2026-04-10T08:00:00Z',
           totalCostUSD: 10,
+          totalCacheReadCostUSD: 0,
           totalInputTokens: 0,
           totalOutputTokens: 0,
           totalCacheReadTokens: 0,
@@ -93,6 +96,7 @@ describe('aggregateProjectsIntoDays', () => {
           firstTimestamp: '2026-04-09T10:00:00Z',
           lastTimestamp: '2026-04-09T10:05:00Z',
           totalCostUSD: 3,
+          totalCacheReadCostUSD: 0,
           totalInputTokens: 0,
           totalOutputTokens: 0,
           totalCacheReadTokens: 0,
@@ -124,6 +128,7 @@ describe('aggregateProjectsIntoDays', () => {
     expect(day.categories['coding']).toEqual({
       turns: 1,
       cost: 3,
+      cacheReadCost: 0,
       editTurns: 1,
       oneShotTurns: 1,
     })
@@ -138,6 +143,7 @@ describe('aggregateProjectsIntoDays', () => {
           firstTimestamp: '2026-04-09T23:59:00Z',
           lastTimestamp: '2026-04-10T00:10:00Z',
           totalCostUSD: 1,
+          totalCacheReadCostUSD: 0,
           totalInputTokens: 0, totalOutputTokens: 0, totalCacheReadTokens: 0, totalCacheWriteTokens: 0,
           apiCalls: 0,
           turns: [],
@@ -160,6 +166,7 @@ describe('aggregateProjectsIntoDays', () => {
           firstTimestamp: '2026-04-10T10:00:00Z',
           lastTimestamp: '2026-04-10T10:00:00Z',
           totalCostUSD: 10,
+          totalCacheReadCostUSD: 0,
           totalInputTokens: 0, totalOutputTokens: 0, totalCacheReadTokens: 0, totalCacheWriteTokens: 0,
           apiCalls: 2,
           turns: [
@@ -180,17 +187,17 @@ describe('aggregateProjectsIntoDays', () => {
     const days = aggregateProjectsIntoDays(projects)
     const day = days[0]!
     expect(day.models['Opus 4.7']).toEqual({
-      calls: 1, cost: 7,
+      calls: 1, cost: 7, cacheReadCost: 0,
       inputTokens: 100, outputTokens: 200,
       cacheReadTokens: 50, cacheWriteTokens: 0,
     })
     expect(day.models['gpt-5']).toEqual({
-      calls: 1, cost: 3,
+      calls: 1, cost: 3, cacheReadCost: 0,
       inputTokens: 100, outputTokens: 200,
       cacheReadTokens: 50, cacheWriteTokens: 0,
     })
-    expect(day.providers['claude']).toEqual({ calls: 1, cost: 7 })
-    expect(day.providers['codex']).toEqual({ calls: 1, cost: 3 })
+    expect(day.providers['claude']).toEqual({ calls: 1, cost: 7, cacheReadCost: 0 })
+    expect(day.providers['codex']).toEqual({ calls: 1, cost: 3, cacheReadCost: 0 })
   })
 })
 
@@ -199,6 +206,7 @@ describe('buildPeriodDataFromDays', () => {
     return {
       date,
       cost,
+      cacheReadCost: 0,
       calls: 10,
       sessions: 2,
       inputTokens: 100,
@@ -208,11 +216,11 @@ describe('buildPeriodDataFromDays', () => {
       editTurns: 3,
       oneShotTurns: 2,
       models: {
-        'Opus 4.7': { calls: 8, cost: cost * 0.8, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
-        'Haiku 4.5': { calls: 2, cost: cost * 0.2, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        'Opus 4.7': { calls: 8, cost: cost * 0.8, cacheReadCost: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        'Haiku 4.5': { calls: 2, cost: cost * 0.2, cacheReadCost: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
       },
-      categories: { 'coding': { turns: 2, cost: cost * 0.5, editTurns: 2, oneShotTurns: 1 } },
-      providers: { 'claude': { calls: 10, cost } },
+      categories: { 'coding': { turns: 2, cost: cost * 0.5, cacheReadCost: 0, editTurns: 2, oneShotTurns: 1 } },
+      providers: { 'claude': { calls: 10, cost, cacheReadCost: 0 } },
     }
   }
 
@@ -276,6 +284,7 @@ describe('buildPeriodDataFromDays', () => {
           firstTimestamp: userTs,
           lastTimestamp: assistantTs,
           totalCostUSD: 5,
+          totalCacheReadCostUSD: 0,
           totalInputTokens: 0, totalOutputTokens: 0, totalCacheReadTokens: 0, totalCacheWriteTokens: 0,
           apiCalls: 1,
           turns: [{

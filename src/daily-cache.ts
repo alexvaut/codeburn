@@ -4,12 +4,13 @@ import { mkdir, open, readFile, rename, unlink } from 'fs/promises'
 import { homedir } from 'os'
 import { join } from 'path'
 
-export const DAILY_CACHE_VERSION = 3
+export const DAILY_CACHE_VERSION = 4
 const DAILY_CACHE_FILENAME = 'daily-cache.json'
 
 export type DailyEntry = {
   date: string
   cost: number
+  cacheReadCost: number
   calls: number
   sessions: number
   inputTokens: number
@@ -21,13 +22,14 @@ export type DailyEntry = {
   models: Record<string, {
     calls: number
     cost: number
+    cacheReadCost: number
     inputTokens: number
     outputTokens: number
     cacheReadTokens: number
     cacheWriteTokens: number
   }>
-  categories: Record<string, { turns: number; cost: number; editTurns: number; oneShotTurns: number }>
-  providers: Record<string, { calls: number; cost: number }>
+  categories: Record<string, { turns: number; cost: number; cacheReadCost: number; editTurns: number; oneShotTurns: number }>
+  providers: Record<string, { calls: number; cost: number; cacheReadCost: number }>
 }
 
 export type DailyCache = {

@@ -1,17 +1,20 @@
+import { cacheHitPercent } from './cache-hit.js'
+
 /// Rollup of one time window (today / 7 days / 30 days / month / all) used as the canonical
 /// input to the menubar payload. Built inside the CLI and also consumed by the day-aggregator
 /// when hydrating per-day cache entries.
 export type PeriodData = {
   label: string
   cost: number
+  cacheReadCost: number
   calls: number
   sessions: number
   inputTokens: number
   outputTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
-  categories: Array<{ name: string; cost: number; turns: number; editTurns: number; oneShotTurns: number }>
-  models: Array<{ name: string; cost: number; calls: number }>
+  categories: Array<{ name: string; cost: number; cacheReadCost: number; turns: number; editTurns: number; oneShotTurns: number }>
+  models: Array<{ name: string; cost: number; cacheReadCost: number; calls: number }>
 }
 
 export type ProviderCost = {
@@ -99,11 +102,6 @@ function aggregateOneShotRate(categories: PeriodData['categories']): number | nu
   return oneShots / edits
 }
 
-function cacheHitPercent(inputTokens: number, cacheReadTokens: number): number {
-  const denom = inputTokens + cacheReadTokens
-  if (denom === 0) return 0
-  return (cacheReadTokens / denom) * 100
-}
 
 function buildTopActivities(categories: PeriodData['categories']): MenubarPayload['current']['topActivities'] {
   return categories.slice(0, TOP_ACTIVITIES_LIMIT).map(cat => ({
@@ -171,7 +169,7 @@ export function buildMenubarPayload(
       oneShotRate: aggregateOneShotRate(current.categories),
       inputTokens: current.inputTokens,
       outputTokens: current.outputTokens,
-      cacheHitPercent: cacheHitPercent(current.inputTokens, current.cacheReadTokens),
+      cacheHitPercent: cacheHitPercent(current.inputTokens, current.cacheReadTokens, current.cacheWriteTokens),
       topActivities: buildTopActivities(current.categories),
       topModels: buildTopModels(current.models),
       providers: buildProviders(providers),

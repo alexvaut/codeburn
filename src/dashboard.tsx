@@ -2,6 +2,7 @@ import { homedir } from 'os'
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { render, Box, Text, useInput, useApp, useWindowSize } from 'ink'
+import { cacheHitPercent } from './cache-hit.js'
 import { CATEGORY_LABELS, type DateRange, type ProjectSummary, type TaskCategory } from './types.js'
 import { formatCost, formatTokens } from './format.js'
 import { parseAllSessions, filterProjectsByName } from './parser.js'
@@ -177,9 +178,7 @@ function Overview({ projects, label, width, planUsage }: { projects: ProjectSumm
   const totalOutput = allSessions.reduce((s, sess) => s + sess.totalOutputTokens, 0)
   const totalCacheRead = allSessions.reduce((s, sess) => s + sess.totalCacheReadTokens, 0)
   const totalCacheWrite = allSessions.reduce((s, sess) => s + sess.totalCacheWriteTokens, 0)
-  const allInputTokens = totalInput + totalCacheRead + totalCacheWrite
-  const cacheHit = allInputTokens > 0
-    ? (totalCacheRead / allInputTokens) * 100 : 0
+  const cacheHit = cacheHitPercent(totalInput, totalCacheRead, totalCacheWrite)
   const planLabel = planUsage ? `${planDisplayName(planUsage.plan.id)}: ${formatCost(planUsage.spentApiEquivalentUsd)} API-equivalent vs ${formatCost(planUsage.budgetUsd)} plan` : ''
   const planPct = planUsage ? `${planUsage.percentUsed.toFixed(1)}%` : ''
   const planColor = planUsage
@@ -335,9 +334,9 @@ function ModelBreakdown({ projects, pw, bw }: { projects: ProjectSummary[]; pw: 
     <Panel title="By Model" color={PANEL_COLORS.model} width={pw}>
       <Text dimColor wrap="truncate-end">{''.padEnd(bw + 1 + MODEL_NAME_WIDTH)}{'cost'.padStart(MODEL_COL_COST)}{'cache'.padStart(MODEL_COL_CACHE)}{'calls'.padStart(MODEL_COL_CALLS)}</Text>
       {sorted.map(([model, data], i) => {
-        const totalInput = data.freshInput + data.cacheRead + data.cacheWrite
-        const cacheHit = totalInput > 0 ? (data.cacheRead / totalInput) * 100 : 0
-        const cacheLabel = totalInput > 0 ? `${cacheHit.toFixed(1)}%` : '-'
+        const hasTokens = data.freshInput + data.cacheRead + data.cacheWrite > 0
+        const cacheHit = cacheHitPercent(data.freshInput, data.cacheRead, data.cacheWrite)
+        const cacheLabel = hasTokens ? `${cacheHit.toFixed(1)}%` : '-'
         return (
           <Text key={`${model}-${i}`} wrap="truncate-end">
             <HBar value={data.costUSD} max={maxCost} width={bw} />

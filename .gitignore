@@ -40,3 +40,4 @@ assets/discord-*.png
 
 # Desktop app experiments
 desktop/
+.playwright-mcp/

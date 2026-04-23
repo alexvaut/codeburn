@@ -91,6 +91,7 @@ function parseApiCall(entry: JournalEntry): ParsedApiCall | null {
   }
 
   const tools = extractToolNames(msg.content ?? [])
+  const speed = usage.speed ?? 'standard'
   const costUSD = calculateCost(
     msg.model,
     tokens.inputTokens,
@@ -98,8 +99,9 @@ function parseApiCall(entry: JournalEntry): ParsedApiCall | null {
     tokens.cacheCreationInputTokens,
     tokens.cacheReadInputTokens,
     tokens.webSearchRequests,
-    usage.speed ?? 'standard',
+    speed,
   )
+  const cacheReadCostUSD = calculateCost(msg.model, 0, 0, 0, tokens.cacheReadInputTokens, 0, speed)
 
   const bashCmds = extractBashCommandsFromContent(msg.content ?? [])
 
@@ -108,11 +110,12 @@ function parseApiCall(entry: JournalEntry): ParsedApiCall | null {
     model: msg.model,
     usage: tokens,
     costUSD,
+    cacheReadCostUSD,
     tools,
     mcpTools: extractMcpTools(tools),
     hasAgentSpawn: tools.includes('Agent'),
     hasPlanMode: tools.includes('EnterPlanMode'),
-    speed: usage.speed ?? 'standard',
+    speed,
     timestamp: entry.timestamp ?? '',
     bashCommands: bashCmds,
     deduplicationKey: msg.id ?? `claude:${entry.timestamp}`,
@@ -176,6 +179,7 @@ function buildSessionSummary(
   const categoryBreakdown: SessionSummary['categoryBreakdown'] = Object.create(null)
 
   let totalCost = 0
+  let totalCacheReadCost = 0
   let totalInput = 0
   let totalOutput = 0
   let totalCacheRead = 0
@@ -186,12 +190,14 @@ function buildSessionSummary(
 
   for (const turn of turns) {
     const turnCost = turn.assistantCalls.reduce((s, c) => s + c.costUSD, 0)
+    const turnCacheReadCost = turn.assistantCalls.reduce((s, c) => s + c.cacheReadCostUSD, 0)
 
     if (!categoryBreakdown[turn.category]) {
-      categoryBreakdown[turn.category] = { turns: 0, costUSD: 0, retries: 0, editTurns: 0, oneShotTurns: 0 }
+      categoryBreakdown[turn.category] = { turns: 0, costUSD: 0, cacheReadCostUSD: 0, retries: 0, editTurns: 0, oneShotTurns: 0 }
     }
     categoryBreakdown[turn.category].turns++
     categoryBreakdown[turn.category].costUSD += turnCost
+    categoryBreakdown[turn.category].cacheReadCostUSD += turnCacheReadCost
     if (turn.hasEdits) {
       categoryBreakdown[turn.category].editTurns++
       categoryBreakdown[turn.category].retries += turn.retries
@@ -200,6 +206,7 @@ function buildSessionSummary(
 
     for (const call of turn.assistantCalls) {
       totalCost += call.costUSD
+      totalCacheReadCost += call.cacheReadCostUSD
       totalInput += call.usage.inputTokens
       totalOutput += call.usage.outputTokens
       totalCacheRead += call.usage.cacheReadInputTokens
@@ -211,11 +218,13 @@ function buildSessionSummary(
         modelBreakdown[modelKey] = {
           calls: 0,
           costUSD: 0,
+          cacheReadCostUSD: 0,
           tokens: { inputTokens: 0, outputTokens: 0, cacheCreationInputTokens: 0, cacheReadInputTokens: 0, cachedInputTokens: 0, reasoningTokens: 0, webSearchRequests: 0 },
         }
       }
       modelBreakdown[modelKey].calls++
       modelBreakdown[modelKey].costUSD += call.costUSD
+      modelBreakdown[modelKey].cacheReadCostUSD += call.cacheReadCostUSD
       modelBreakdown[modelKey].tokens.inputTokens += call.usage.inputTokens
       modelBreakdown[modelKey].tokens.outputTokens += call.usage.outputTokens
       modelBreakdown[modelKey].tokens.cacheReadInputTokens += call.usage.cacheReadInputTokens
@@ -246,6 +255,7 @@ function buildSessionSummary(
     firstTimestamp: firstTs || turns[0]?.timestamp || '',
     lastTimestamp: lastTs || turns[turns.length - 1]?.timestamp || '',
     totalCostUSD: totalCost,
+    totalCacheReadCostUSD: totalCacheReadCost,
     totalInputTokens: totalInput,
     totalOutputTokens: totalOutput,
     totalCacheReadTokens: totalCacheRead,
@@ -349,6 +359,7 @@ async function scanProjectDirs(dirs: Array<{ path: string; name: string }>, seen
       projectPath: unsanitizePath(dirName),
       sessions,
       totalCostUSD: sessions.reduce((s, sess) => s + sess.totalCostUSD, 0),
+      totalCacheReadCostUSD: sessions.reduce((s, sess) => s + sess.totalCacheReadCostUSD, 0),
       totalApiCalls: sessions.reduce((s, sess) => s + sess.apiCalls, 0),
     })
   }
@@ -373,6 +384,7 @@ function providerCallToTurn(call: ParsedProviderCall): ParsedTurn {
     model: call.model,
     usage,
     costUSD: call.costUSD,
+    cacheReadCostUSD: calculateCost(call.model, 0, 0, 0, call.cacheReadInputTokens, 0, call.speed),
     tools,
     mcpTools: extractMcpTools(tools),
     hasAgentSpawn: tools.includes('Agent'),
@@ -452,6 +464,7 @@ async function parseProviderSources(
       projectPath: unsanitizePath(dirName),
       sessions,
       totalCostUSD: sessions.reduce((s, sess) => s + sess.totalCostUSD, 0),
+      totalCacheReadCostUSD: sessions.reduce((s, sess) => s + sess.totalCacheReadCostUSD, 0),
       totalApiCalls: sessions.reduce((s, sess) => s + sess.apiCalls, 0),
     })
   }
@@ -539,6 +552,7 @@ export async function parseAllSessions(dateRange?: DateRange, providerFilter?: s
     if (existing) {
       existing.sessions.push(...p.sessions)
       existing.totalCostUSD += p.totalCostUSD
+      existing.totalCacheReadCostUSD += p.totalCacheReadCostUSD
       existing.totalApiCalls += p.totalApiCalls
     } else {
       mergedMap.set(p.project, { ...p })

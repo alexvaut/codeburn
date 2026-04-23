@@ -8,13 +8,17 @@
     "codeburn": "dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "web/dist"
   ],
   "scripts": {
     "build": "tsup",
+    "build:web": "cd web && npm run build",
     "dev": "tsx src/cli.ts",
+    "dev:server": "tsx watch src/cli.ts serve --no-open",
+    "dev:web": "cd web && npm run dev",
     "test": "vitest",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build && npm run build:web"
   },
   "keywords": [
     "claude-code",
@@ -42,8 +46,10 @@
   },
   "homepage": "https://github.com/getagentseal/codeburn#readme",
   "dependencies": {
+    "@fastify/static": "^7.0.4",
     "chalk": "^5.4.1",
     "commander": "^13.1.0",
+    "fastify": "^4.28.1",
     "ink": "^7.0.0",
     "react": "^19.2.5"
   },

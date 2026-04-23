@@ -1,4 +1,5 @@
 import { Command } from 'commander'
+import { cacheHitPercent as cacheHitPercentHelper } from './cache-hit.js'
 import { installMenubarApp } from './menubar-installer.js'
 import { exportCsv, exportJson, type PeriodExport } from './export.js'
 import { loadPricing, setModelAliases } from './models.js'
@@ -158,10 +159,7 @@ function buildJsonReport(projects: ProjectSummary[], period: string, periodKey: 
   const totalOutput = sessions.reduce((s, sess) => s + sess.totalOutputTokens, 0)
   const totalCacheRead = sessions.reduce((s, sess) => s + sess.totalCacheReadTokens, 0)
   const totalCacheWrite = sessions.reduce((s, sess) => s + sess.totalCacheWriteTokens, 0)
-  // Match src/menubar-json.ts:cacheHitPercent: reads over reads+fresh-input. cache_write
-  // counts tokens being stored, not served, so it doesn't belong in the denominator.
-  const cacheHitDenom = totalInput + totalCacheRead
-  const cacheHitPercent = cacheHitDenom > 0 ? Math.round((totalCacheRead / cacheHitDenom) * 1000) / 10 : 0
+  const cacheHitPercent = cacheHitPercentHelper(totalInput, totalCacheRead, totalCacheWrite)
 
   const dailyMap: Record<string, { cost: number; calls: number }> = {}
   for (const sess of sessions) {
@@ -281,6 +279,22 @@ function buildJsonReport(projects: ProjectSummary[], period: string, periodKey: 
 }
 
 program
+  .command('serve')
+  .description('Start local web dashboard')
+  .option('--port <port>', 'HTTP port', '3000')
+  .option('--host <host>', 'Bind host (local-only by default)', '127.0.0.1')
+  .option('--no-open', "Don't open the browser")
+  .action(async (opts: { port: string; host: string; open: boolean }) => {
+    await loadPricing()
+    const { startServer } = await import('./server/index.js')
+    await startServer({
+      port: Number(opts.port),
+      host: opts.host,
+      open: opts.open !== false,
+    })
+  })
+
+program
   .command('report', { isDefault: true })
   .description('Interactive usage dashboard')
   .option('-p, --period <period>', 'Starting period: today, week, 30days, month, all', 'week')
@@ -322,8 +336,8 @@ program
 
 function buildPeriodData(label: string, projects: ProjectSummary[]): PeriodData {
   const sessions = projects.flatMap(p => p.sessions)
-  const catTotals: Record<string, { turns: number; cost: number; editTurns: number; oneShotTurns: number }> = {}
-  const modelTotals: Record<string, { calls: number; cost: number }> = {}
+  const catTotals: Record<string, { turns: number; cost: number; cacheReadCost: number; editTurns: number; oneShotTurns: number }> = {}
+  const modelTotals: Record<string, { calls: number; cost: number; cacheReadCost: number }> = {}
   let inputTokens = 0, outputTokens = 0, cacheReadTokens = 0, cacheWriteTokens = 0
 
   for (const sess of sessions) {
@@ -332,22 +346,25 @@ function buildPeriodData(label: string, projects: ProjectSummary[]): PeriodData 
     cacheReadTokens += sess.totalCacheReadTokens
     cacheWriteTokens += sess.totalCacheWriteTokens
     for (const [cat, d] of Object.entries(sess.categoryBreakdown)) {
-      if (!catTotals[cat]) catTotals[cat] = { turns: 0, cost: 0, editTurns: 0, oneShotTurns: 0 }
+      if (!catTotals[cat]) catTotals[cat] = { turns: 0, cost: 0, cacheReadCost: 0, editTurns: 0, oneShotTurns: 0 }
       catTotals[cat].turns += d.turns
       catTotals[cat].cost += d.costUSD
+      catTotals[cat].cacheReadCost += d.cacheReadCostUSD
       catTotals[cat].editTurns += d.editTurns
       catTotals[cat].oneShotTurns += d.oneShotTurns
     }
     for (const [model, d] of Object.entries(sess.modelBreakdown)) {
-      if (!modelTotals[model]) modelTotals[model] = { calls: 0, cost: 0 }
+      if (!modelTotals[model]) modelTotals[model] = { calls: 0, cost: 0, cacheReadCost: 0 }
       modelTotals[model].calls += d.calls
       modelTotals[model].cost += d.costUSD
+      modelTotals[model].cacheReadCost += d.cacheReadCostUSD
     }
   }
 
   return {
     label,
     cost: projects.reduce((s, p) => s + p.totalCostUSD, 0),
+    cacheReadCost: projects.reduce((s, p) => s + p.totalCacheReadCostUSD, 0),
     calls: projects.reduce((s, p) => s + p.totalApiCalls, 0),
     sessions: projects.reduce((s, p) => s + p.sessions.length, 0),
     inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens,

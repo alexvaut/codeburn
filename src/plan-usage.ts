@@ -12,10 +12,14 @@ export type PlanUsage = {
   periodStart: Date
   periodEnd: Date
   spentApiEquivalentUsd: number
+  spentSubscriptionUsd: number
   budgetUsd: number
   percentUsed: number
+  percentUsedSubscription: number
   status: PlanStatus
+  statusSubscription: PlanStatus
   projectedMonthUsd: number
+  projectedMonthUsdSubscription: number
   daysUntilReset: number
 }
 
@@ -73,6 +77,7 @@ export function projectMonthEnd(
   periodEnd: Date,
   today: Date,
   spent: number,
+  mode: 'api' | 'subscription' = 'api',
 ): number {
   const dayCosts = new Map<string, number>()
 
@@ -84,7 +89,9 @@ export function projectMonthEnd(
         if (Number.isNaN(ts.getTime())) continue
         if (ts < periodStart || ts > today) continue
         const dayKey = toLocalDateKey(ts)
-        const turnCost = turn.assistantCalls.reduce((sum, call) => sum + call.costUSD, 0)
+        const turnCost = turn.assistantCalls.reduce((sum, call) => {
+          return sum + (mode === 'subscription' ? call.costUSD - call.cacheReadCostUSD : call.costUSD)
+        }, 0)
         dayCosts.set(dayKey, (dayCosts.get(dayKey) ?? 0) + turnCost)
       }
     }
@@ -107,10 +114,14 @@ export function projectMonthEnd(
 export function getPlanUsageFromProjects(plan: Plan, projects: ProjectSummary[], today = new Date()): PlanUsage {
   const { periodStart, periodEnd } = computePeriodFromResetDay(plan.resetDay, today)
   const spent = projects.reduce((sum, p) => sum + p.totalCostUSD, 0)
+  const spentCacheRead = projects.reduce((sum, p) => sum + p.totalCacheReadCostUSD, 0)
+  const spentSubscription = Math.max(0, spent - spentCacheRead)
   const budgetUsd = plan.monthlyUsd
   const percentUsed = budgetUsd > 0 ? (spent / budgetUsd) * 100 : 0
-  const status: PlanStatus = percentUsed > 100 ? 'over' : percentUsed >= PLAN_NEAR_THRESHOLD_PCT ? 'near' : 'under'
-  const projectedMonthUsd = projectMonthEnd(projects, periodStart, periodEnd, today, spent)
+  const percentUsedSubscription = budgetUsd > 0 ? (spentSubscription / budgetUsd) * 100 : 0
+  const toStatus = (pct: number): PlanStatus => pct > 100 ? 'over' : pct >= PLAN_NEAR_THRESHOLD_PCT ? 'near' : 'under'
+  const projectedMonthUsd = projectMonthEnd(projects, periodStart, periodEnd, today, spent, 'api')
+  const projectedMonthUsdSubscription = projectMonthEnd(projects, periodStart, periodEnd, today, spentSubscription, 'subscription')
   const daysUntilReset = Math.max(0, diffCalendarDays(today, periodEnd))
 
   return {
@@ -118,10 +129,14 @@ export function getPlanUsageFromProjects(plan: Plan, projects: ProjectSummary[],
     periodStart,
     periodEnd,
     spentApiEquivalentUsd: spent,
+    spentSubscriptionUsd: spentSubscription,
     budgetUsd,
     percentUsed,
-    status,
+    percentUsedSubscription,
+    status: toStatus(percentUsed),
+    statusSubscription: toStatus(percentUsedSubscription),
     projectedMonthUsd,
+    projectedMonthUsdSubscription,
     daysUntilReset,
   }
 }
