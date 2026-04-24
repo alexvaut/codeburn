@@ -6,7 +6,7 @@ import Foundation
 /// Pipe file descriptors pinned forever.
 private let maxPayloadBytes = 20 * 1024 * 1024
 private let maxStderrBytes = 256 * 1024
-private let spawnTimeoutSeconds: UInt64 = 60
+private let spawnTimeoutSeconds: UInt64 = 20
 
 enum DataClientError: Error {
     case spawn(String)
