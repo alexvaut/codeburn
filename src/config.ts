@@ -13,6 +13,18 @@ export type Plan = {
   setAt: string
 }
 
+export type ProjectGroupRule = {
+  pattern: string
+  name: string
+}
+
+export type IngestionConfig = {
+  enabled?: boolean
+  sweepIntervalMs?: number
+}
+
+export const DEFAULT_SWEEP_INTERVAL_MS = 30_000
+
 export type CodeburnConfig = {
   currency?: {
     code: string
@@ -20,6 +32,21 @@ export type CodeburnConfig = {
   }
   plan?: Plan
   modelAliases?: Record<string, string>
+  projectGroups?: ProjectGroupRule[]
+  ingestion?: IngestionConfig
+}
+
+export function getIngestionConfig(config: CodeburnConfig): Required<IngestionConfig> {
+  return {
+    enabled: config.ingestion?.enabled ?? true,
+    sweepIntervalMs: Math.max(5_000, config.ingestion?.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS),
+  }
+}
+
+export async function saveIngestionConfig(ingestion: IngestionConfig): Promise<void> {
+  const config = await readConfig()
+  config.ingestion = { ...config.ingestion, ...ingestion }
+  await saveConfig(config)
 }
 
 function getConfigDir(): string {

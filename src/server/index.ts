@@ -7,6 +7,9 @@ import Fastify from 'fastify'
 import fastifyStatic from '@fastify/static'
 
 import { registerRoutes } from './routes.js'
+import { getDb, closeDb } from '../db/connection.js'
+import { startSweeper, stopSweeper } from '../ingest/sweeper.js'
+import { getIngestionConfig, readConfig } from '../config.js'
 
 export type ServerOptions = {
   port: number
@@ -46,7 +49,16 @@ function openBrowser(url: string): void {
 export async function startServer(opts: ServerOptions): Promise<void> {
   const app = Fastify({ logger: false })
 
+  // Open DB + run migrations up-front so first request doesn't race.
+  getDb()
+
   registerRoutes(app)
+
+  const config = await readConfig()
+  const ing = getIngestionConfig(config)
+  if (ing.enabled) {
+    startSweeper(ing.sweepIntervalMs)
+  }
 
   const staticRoot = resolveStaticRoot()
   if (staticRoot) {
@@ -78,7 +90,9 @@ export async function startServer(opts: ServerOptions): Promise<void> {
   if (opts.open) openBrowser(url)
 
   const shutdown = async (): Promise<void> => {
+    stopSweeper()
     try { await app.close() } catch { /* best-effort */ }
+    closeDb()
     process.exit(0)
   }
   process.on('SIGINT', shutdown)

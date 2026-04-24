@@ -17,6 +17,7 @@
     "dev": "tsx src/cli.ts",
     "dev:server": "tsx watch src/cli.ts serve --no-open",
     "dev:web": "cd web && npm run dev",
+    "dev:all": "node scripts/dev.mjs",
     "test": "vitest",
     "prepublishOnly": "npm run build && npm run build:web"
   },

@@ -16,11 +16,13 @@ import { ActivityList } from './components/ActivityList'
 import { ModelList } from './components/ModelList'
 import { CallList } from './components/CallList'
 import { SessionDetail } from './components/SessionDetail'
+import { Settings } from './components/Settings'
 
 export function App() {
   const pathname = useRoute()
   const sessionMatch = pathname.match(/^\/session\/(.+)$/)
   if (sessionMatch) return <SessionDetail sessionId={decodeURIComponent(sessionMatch[1])} />
+  if (pathname === '/settings') return <Settings />
   return <Dashboard />
 }
 

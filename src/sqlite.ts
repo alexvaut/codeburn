@@ -15,7 +15,21 @@ export type SqliteDatabase = {
 }
 
 type DatabaseSyncCtor = new (path: string, options?: { readOnly?: boolean }) => {
-  prepare(sql: string): { all(...params: unknown[]): Row[] }
+  prepare(sql: string): {
+    all(...params: unknown[]): Row[]
+    run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint }
+    get(...params: unknown[]): Row | undefined
+  }
+  exec(sql: string): void
+  close(): void
+}
+
+export type SqliteWritable = {
+  exec(sql: string): void
+  query<T extends Row = Row>(sql: string, params?: unknown[]): T[]
+  get<T extends Row = Row>(sql: string, params?: unknown[]): T | undefined
+  run(sql: string, params?: unknown[]): { changes: number }
+  transaction<T>(fn: () => T): T
   close(): void
 }
 
@@ -93,6 +107,47 @@ export function openDatabase(path: string): SqliteDatabase {
   return {
     query<T extends Row = Row>(sql: string, params: unknown[] = []): T[] {
       return db.prepare(sql).all(...params) as T[]
+    },
+    close() {
+      db.close()
+    },
+  }
+}
+
+export function openWritable(path: string): SqliteWritable {
+  if (!loadDriver() || DatabaseSync === null) {
+    throw new Error(getSqliteLoadError())
+  }
+
+  const db = new DatabaseSync(path)
+  db.exec('PRAGMA journal_mode = WAL')
+  db.exec('PRAGMA synchronous = NORMAL')
+  db.exec('PRAGMA foreign_keys = ON')
+
+  return {
+    exec(sql: string): void {
+      db.exec(sql)
+    },
+    query<T extends Row = Row>(sql: string, params: unknown[] = []): T[] {
+      return db.prepare(sql).all(...params) as T[]
+    },
+    get<T extends Row = Row>(sql: string, params: unknown[] = []): T | undefined {
+      return db.prepare(sql).get(...params) as T | undefined
+    },
+    run(sql: string, params: unknown[] = []): { changes: number } {
+      const r = db.prepare(sql).run(...params)
+      return { changes: r.changes }
+    },
+    transaction<T>(fn: () => T): T {
+      db.exec('BEGIN')
+      try {
+        const result = fn()
+        db.exec('COMMIT')
+        return result
+      } catch (err) {
+        try { db.exec('ROLLBACK') } catch { /* ignore */ }
+        throw err
+      }
     },
     close() {
       db.close()

@@ -2,6 +2,7 @@ import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import { useFilters } from '../filters-context'
 import { api } from '../api'
 import { useCostMode, type CostMode } from '../cost-mode'
+import { navigate } from '../router'
 
 export function Header() {
   const qc = useQueryClient()
@@ -36,6 +37,12 @@ export function Header() {
         >
           Export CSV
         </a>
+        <button
+          onClick={() => navigate('/settings')}
+          className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Settings
+        </button>
         <button
           onClick={() => qc.invalidateQueries()}
           className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-60"

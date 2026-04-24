@@ -1,4 +1,5 @@
-import { parseAllSessions, filterProjectsByName } from '../parser.js'
+import { filterProjectsByName } from '../parser.js'
+import { queryProjects } from '../db/query.js'
 import { getSessionLimits } from '../session-limits.js'
 import type { DateRange, ProjectSummary } from '../types.js'
 
@@ -125,7 +126,7 @@ export async function parseFilters(query: Record<string, unknown>): Promise<Filt
 
 export async function loadFilteredProjects(f: Filters): Promise<ProjectSummary[]> {
   return filterProjectsByName(
-    await parseAllSessions(f.range, f.provider),
+    await queryProjects(f.range, f.provider),
     f.projects,
     f.excludes,
   )

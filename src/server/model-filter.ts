@@ -6,6 +6,8 @@ function emptyTokens(): TokenUsage {
     inputTokens: 0,
     outputTokens: 0,
     cacheCreationInputTokens: 0,
+    cacheCreation1hTokens: 0,
+    cacheCreation5mTokens: 0,
     cacheReadInputTokens: 0,
     cachedInputTokens: 0,
     reasoningTokens: 0,
@@ -18,6 +20,8 @@ function addTokens(a: TokenUsage, b: TokenUsage): TokenUsage {
     inputTokens: a.inputTokens + b.inputTokens,
     outputTokens: a.outputTokens + b.outputTokens,
     cacheCreationInputTokens: a.cacheCreationInputTokens + b.cacheCreationInputTokens,
+    cacheCreation1hTokens: a.cacheCreation1hTokens + b.cacheCreation1hTokens,
+    cacheCreation5mTokens: a.cacheCreation5mTokens + b.cacheCreation5mTokens,
     cacheReadInputTokens: a.cacheReadInputTokens + b.cacheReadInputTokens,
     cachedInputTokens: a.cachedInputTokens + b.cachedInputTokens,
     reasoningTokens: a.reasoningTokens + b.reasoningTokens,
@@ -32,6 +36,8 @@ function rebuildSession(session: SessionSummary, keptTurns: ClassifiedTurn[]): S
   let totalOutputTokens = 0
   let totalCacheReadTokens = 0
   let totalCacheWriteTokens = 0
+  let totalCacheWrite1hTokens = 0
+  let totalCacheWrite5mTokens = 0
   let apiCalls = 0
   const modelBreakdown: Record<string, { calls: number; costUSD: number; cacheReadCostUSD: number; tokens: TokenUsage }> = {}
   const toolBreakdown: Record<string, { calls: number }> = {}
@@ -51,6 +57,8 @@ function rebuildSession(session: SessionSummary, keptTurns: ClassifiedTurn[]): S
       totalOutputTokens += call.usage.outputTokens
       totalCacheReadTokens += call.usage.cacheReadInputTokens
       totalCacheWriteTokens += call.usage.cacheCreationInputTokens
+      totalCacheWrite1hTokens += call.usage.cacheCreation1hTokens
+      totalCacheWrite5mTokens += call.usage.cacheCreation5mTokens
       apiCalls += 1
 
       const modelKey = getShortModelName(call.model)
@@ -91,6 +99,8 @@ function rebuildSession(session: SessionSummary, keptTurns: ClassifiedTurn[]): S
     totalOutputTokens,
     totalCacheReadTokens,
     totalCacheWriteTokens,
+    totalCacheWrite1hTokens,
+    totalCacheWrite5mTokens,
     apiCalls,
     turns: keptTurns,
     modelBreakdown,

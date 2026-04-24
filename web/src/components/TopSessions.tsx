@@ -45,7 +45,12 @@ export function TopSessions() {
                 className="cursor-pointer hover:bg-slate-50"
               >
                 <td className="py-2.5 pr-3 text-slate-600">{r.date ?? '—'}</td>
-                <td className="py-2.5 pr-3 text-slate-900">{r.project}</td>
+                <td className="py-2.5 pr-3">
+                  <div className="text-slate-900">{r.project}</div>
+                  {r.projectPath && r.projectPath !== r.project && (
+                    <div className="text-[10px] font-normal text-slate-400">{r.projectPath}</div>
+                  )}
+                </td>
                 <td className="py-2.5 pr-3">
                   {r.model ? (
                     <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] text-slate-700">{r.model}</span>

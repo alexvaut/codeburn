@@ -20,7 +20,7 @@ export function FiltersBar() {
   const { data } = useQuery({ queryKey: ['filters', filters], queryFn: () => api.filters(filters) })
   const { data: summary } = useQuery({ queryKey: ['summary', filters], queryFn: () => api.summary(filters) })
 
-  const hasSessionLimits = !!(summary?.sessionLimits?.fiveHour || summary?.sessionLimits?.sevenDay)
+  const hasSessionLimits = !!summary?.sessionLimits
   const periods = hasSessionLimits ? [...BASE_PERIODS, ...WINDOW_PERIODS] : BASE_PERIODS
 
   const activePeriod = filters.from || filters.to ? null : filters.period

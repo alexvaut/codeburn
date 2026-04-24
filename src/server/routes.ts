@@ -11,6 +11,11 @@ import { CATEGORY_LABELS, type ClassifiedTurn, type ProjectSummary, type Session
 import { parseAllSessions } from '../parser.js'
 import { loadFilteredProjects, parseFilters, type Filters } from './filters.js'
 import { filterProjectsByModel } from './model-filter.js'
+import { getDb } from '../db/connection.js'
+import { countSessions } from '../db/repo.js'
+import { getStatus, statusEmitter, type IngestStatus } from '../ingest/status.js'
+import { isSweepRunning, sweepOnce } from '../ingest/sweeper.js'
+import { getIngestionConfig, readConfig, saveIngestionConfig, DEFAULT_SWEEP_INTERVAL_MS } from '../config.js'
 
 const FIVE_HOUR_SECONDS = 5 * 60 * 60
 const SEVEN_DAY_SECONDS = 7 * 24 * 60 * 60
@@ -167,6 +172,8 @@ export function registerRoutes(app: FastifyInstance): void {
     const totalOutput = sessions.reduce((s, x) => s + x.totalOutputTokens, 0)
     const totalCacheRead = sessions.reduce((s, x) => s + x.totalCacheReadTokens, 0)
     const totalCacheWrite = sessions.reduce((s, x) => s + x.totalCacheWriteTokens, 0)
+    const totalCacheWrite1h = sessions.reduce((s, x) => s + x.totalCacheWrite1hTokens, 0)
+    const totalCacheWrite5m = sessions.reduce((s, x) => s + x.totalCacheWrite5mTokens, 0)
     const plan = await getPlanUsageOrNull().catch(() => null)
     const sessionLimits = await buildSessionLimitsJson()
     const { code } = getCurrency()
@@ -188,6 +195,8 @@ export function registerRoutes(app: FastifyInstance): void {
           output: totalOutput,
           cacheRead: totalCacheRead,
           cacheWrite: totalCacheWrite,
+          cacheWrite1h: totalCacheWrite1h,
+          cacheWrite5m: totalCacheWrite5m,
         },
       },
       plan: planUsageJson(plan),
@@ -243,6 +252,7 @@ export function registerRoutes(app: FastifyInstance): void {
         const avg5 = avgLast5TurnCostUSD(s.turns)
         return {
           project: p.project,
+          projectPath: s.project.replace(/-/g, '/'),
           sessionId: s.sessionId,
           date: s.firstTimestamp ? dateKey(s.firstTimestamp) : null,
           model: topModel ? topModel[0] : null,
@@ -390,6 +400,59 @@ export function registerRoutes(app: FastifyInstance): void {
     const toList = (m: Record<string, number>) =>
       Object.entries(m).sort(([, a], [, b]) => b - a).slice(0, limit).map(([name, calls]) => ({ name, calls }))
     return { tools: toList(tools), bash: toList(bash), mcp: toList(mcp) }
+  })
+
+  app.post('/api/ingest/full-rescan', async (_req, reply: FastifyReply) => {
+    if (isSweepRunning()) {
+      reply.code(409).send({ error: 'ingest already running', status: getStatus() })
+      return
+    }
+    void sweepOnce()
+    reply.code(202).send({ status: getStatus() })
+  })
+
+  app.get('/api/ingest/status', async (req, reply: FastifyReply) => {
+    const wantsStream = (req.headers.accept ?? '').includes('text/event-stream')
+    if (!wantsStream) {
+      return { ...getStatus(), sessionsInDb: countSessions(getDb()) }
+    }
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+    const send = (s: IngestStatus) => {
+      reply.raw.write(`data: ${JSON.stringify(s)}\n\n`)
+    }
+    send(getStatus())
+    const listener = (s: IngestStatus) => send(s)
+    statusEmitter.on('change', listener)
+    const keepAlive = setInterval(() => { reply.raw.write(': ping\n\n') }, 15_000)
+    req.raw.on('close', () => {
+      clearInterval(keepAlive)
+      statusEmitter.off('change', listener)
+    })
+    // Prevent fastify from hijacking/closing; returning the raw stream keeps it open.
+    return reply
+  })
+
+  app.get('/api/settings', async () => {
+    const config = await readConfig()
+    const ing = getIngestionConfig(config)
+    return {
+      ingestion: ing,
+      defaults: { sweepIntervalMs: DEFAULT_SWEEP_INTERVAL_MS },
+      sessionsInDb: countSessions(getDb()),
+    }
+  })
+
+  app.put('/api/settings', async (req, reply: FastifyReply) => {
+    const body = (req.body ?? {}) as { ingestion?: { enabled?: boolean; sweepIntervalMs?: number } }
+    if (!body.ingestion) { reply.code(400).send({ error: 'missing ingestion' }); return }
+    await saveIngestionConfig(body.ingestion)
+    const config = await readConfig()
+    return { ingestion: getIngestionConfig(config) }
   })
 
   app.get('/api/export.csv', async (req, reply: FastifyReply) => {

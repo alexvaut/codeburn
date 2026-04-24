@@ -18,7 +18,7 @@ export function KpiGrid() {
   const avgTurnCost = t ? displayCost({ cost: t.avgLast5TurnCost, cacheReadCost: t.avgLast5TurnCacheReadCost }, mode) : 0
 
   return (
-    <section className="mt-6 grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200 md:grid-cols-2 xl:grid-cols-5">
+    <section className="mt-6 grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200 md:grid-cols-2 xl:grid-cols-6">
       <div className="bg-white p-5">
         <div className="flex items-center justify-between text-xs text-slate-500">
           <span>Total cost</span>
@@ -47,6 +47,21 @@ export function KpiGrid() {
           {t ? <>
             <span>{fmtCompact(t.tokens.cacheRead)} read</span>
             <span>{fmtCompact(t.tokens.cacheWrite)} written</span>
+          </> : null}
+        </div>
+      </div>
+
+      <div className="bg-white p-5">
+        <div className="text-xs text-slate-500">Cache TTL (1h share)</div>
+        <div className="mt-2 font-mono text-3xl font-semibold text-slate-900 tabular">
+          {t && (t.tokens.cacheWrite1h + t.tokens.cacheWrite5m) > 0
+            ? `${(t.tokens.cacheWrite1h / (t.tokens.cacheWrite1h + t.tokens.cacheWrite5m) * 100).toFixed(1)}%`
+            : '—'}
+        </div>
+        <div className="mt-1 flex gap-3 text-xs text-slate-500">
+          {t ? <>
+            <span>{fmtCompact(t.tokens.cacheWrite1h)} 1h</span>
+            <span>{fmtCompact(t.tokens.cacheWrite5m)} 5m</span>
           </> : null}
         </div>
       </div>

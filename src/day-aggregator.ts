@@ -13,6 +13,8 @@ function emptyEntry(date: string): DailyEntry {
     outputTokens: 0,
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
+    cacheWrite1hTokens: 0,
+    cacheWrite5mTokens: 0,
     editTurns: 0,
     oneShotTurns: 0,
     models: {},
@@ -71,11 +73,14 @@ export function aggregateProjectsIntoDays(projects: ProjectSummary[]): DailyEntr
           callDay.outputTokens += call.usage.outputTokens
           callDay.cacheReadTokens += call.usage.cacheReadInputTokens
           callDay.cacheWriteTokens += call.usage.cacheCreationInputTokens
+          callDay.cacheWrite1hTokens += call.usage.cacheCreation1hTokens
+          callDay.cacheWrite5mTokens += call.usage.cacheCreation5mTokens
 
           const model = callDay.models[call.model] ?? {
             calls: 0, cost: 0, cacheReadCost: 0,
             inputTokens: 0, outputTokens: 0,
             cacheReadTokens: 0, cacheWriteTokens: 0,
+            cacheWrite1hTokens: 0, cacheWrite5mTokens: 0,
           }
           model.calls += 1
           model.cost += call.costUSD
@@ -84,6 +89,8 @@ export function aggregateProjectsIntoDays(projects: ProjectSummary[]): DailyEntr
           model.outputTokens += call.usage.outputTokens
           model.cacheReadTokens += call.usage.cacheReadInputTokens
           model.cacheWriteTokens += call.usage.cacheCreationInputTokens
+          model.cacheWrite1hTokens += call.usage.cacheCreation1hTokens
+          model.cacheWrite5mTokens += call.usage.cacheCreation5mTokens
           callDay.models[call.model] = model
 
           const provider = callDay.providers[call.provider] ?? { calls: 0, cost: 0, cacheReadCost: 0 }

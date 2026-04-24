@@ -21,7 +21,7 @@ export type Summary = {
     cacheHitPercent: number
     avgLast5TurnCost: number
     avgLast5TurnCacheReadCost: number
-    tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }
+    tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; cacheWrite1h: number; cacheWrite5m: number }
   }
   plan: {
     id: string
@@ -90,6 +90,7 @@ export type ProjectRow = {
 
 export type SessionRow = {
   project: string
+  projectPath: string
   sessionId: string
   date: string | null
   model: string | null
@@ -183,7 +184,50 @@ async function fetchJson<T>(path: string, f: FilterState): Promise<T> {
   return res.json() as Promise<T>
 }
 
+export type IngestStatus = {
+  phase: 'idle' | 'scanning' | 'ingesting' | 'error'
+  filesTotal: number
+  filesDone: number
+  currentFile: string | null
+  startedAt: number | null
+  finishedAt: number | null
+  error: string | null
+  lastSweepAt: number | null
+  sessionsInDb?: number
+}
+
+export type SettingsPayload = {
+  ingestion: { enabled: boolean; sweepIntervalMs: number }
+  defaults: { sweepIntervalMs: number }
+  sessionsInDb: number
+}
+
 export const api = {
+  ingestStart: async (): Promise<IngestStatus> => {
+    const res = await fetch('/api/ingest/full-rescan', { method: 'POST' })
+    const body = await res.json() as { status?: IngestStatus; error?: string }
+    if (!res.ok && res.status !== 409) throw new Error(body.error ?? `ingest → ${res.status}`)
+    return (body.status ?? (await api.ingestStatus())) as IngestStatus
+  },
+  ingestStatus: async (): Promise<IngestStatus> => {
+    const res = await fetch('/api/ingest/status')
+    if (!res.ok) throw new Error(`/ingest/status → ${res.status}`)
+    return res.json() as Promise<IngestStatus>
+  },
+  ingestStatusStreamUrl: '/api/ingest/status',
+  settings: async (): Promise<SettingsPayload> => {
+    const res = await fetch('/api/settings')
+    if (!res.ok) throw new Error(`/settings → ${res.status}`)
+    return res.json() as Promise<SettingsPayload>
+  },
+  updateSettings: async (ingestion: { enabled?: boolean; sweepIntervalMs?: number }): Promise<void> => {
+    const res = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ingestion }),
+    })
+    if (!res.ok) throw new Error(`/settings → ${res.status}`)
+  },
   summary: (f: FilterState) => fetchJson<Summary>('/summary', f),
   daily: (f: FilterState) => fetchJson<DailyPoint[]>('/daily', f),
   projects: (f: FilterState) => fetchJson<ProjectRow[]>('/projects', f),

@@ -13,8 +13,8 @@ const TIER_LABEL: Record<SessionLimits['tier'], string> = {
   unknown: 'Unknown tier',
 }
 
-function fmtCountdown(resetsAt: number, now: number): string {
-  const s = Math.max(0, resetsAt - Math.floor(now / 1000))
+function fmtDuration(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds))
   const h = Math.floor(s / 3600)
   const m = Math.floor((s % 3600) / 60)
   if (h >= 24) {
@@ -26,10 +26,37 @@ function fmtCountdown(resetsAt: number, now: number): string {
   return `${m}m`
 }
 
+function fmtCountdown(resetsAt: number, now: number): string {
+  return fmtDuration(resetsAt - Math.floor(now / 1000))
+}
+
 function pctBarColor(pct: number): string {
   if (pct >= 100) return 'bg-rose-700'
   if (pct >= 85) return 'bg-amber-600'
   return 'bg-slate-700'
+}
+
+type Pace =
+  | { status: 'ok' }
+  | { status: 'over'; extraSeconds: number; projected: number }
+
+function computePace(win: SessionWindow, now: number): Pace | null {
+  const nowSec = Math.floor(now / 1000)
+  const startSec = Math.floor(new Date(win.windowStart).getTime() / 1000)
+  const endSec = Math.floor(new Date(win.windowEnd).getTime() / 1000)
+  const elapsed = nowSec - startSec
+  const duration = endSec - startSec
+  if (elapsed <= 0 || duration <= 0) return null
+  const u = win.utilization
+  if (u >= 1) {
+    return { status: 'over', extraSeconds: Math.max(0, endSec - nowSec), projected: u }
+  }
+  if (u <= 0) return { status: 'ok' }
+  const projected = (u * duration) / elapsed
+  if (projected <= 1) return { status: 'ok' }
+  const timeToLimit = (elapsed * (1 - u)) / u
+  const extra = Math.max(0, endSec - nowSec - timeToLimit)
+  return { status: 'over', extraSeconds: extra, projected }
 }
 
 function WindowCell({ title, win, source, now }: { title: string; win: SessionWindow | null; source: BudgetSource; now: number }) {
@@ -48,6 +75,7 @@ function WindowCell({ title, win, source, now }: { title: string; win: SessionWi
   const remaining = Math.max(0, budget - win.spentUsd)
   const clampedPct = Math.min(100, pct)
   const fallbackFired = source === 'empirical' && !win.empiricalUsable
+  const pace = computePace(win, now)
 
   return (
     <div className="flex-1 p-4">
@@ -66,6 +94,17 @@ function WindowCell({ title, win, source, now }: { title: string; win: SessionWi
       <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
         <div className={`h-full rounded-full ${pctBarColor(pct)}`} style={{ width: `${clampedPct}%` }} />
       </div>
+      {pace && (
+        <div className="mt-1.5 text-[11px]">
+          {pace.status === 'ok' ? (
+            <span className="font-medium text-emerald-600">On pace — full window usable</span>
+          ) : (
+            <span className={`font-medium ${pace.projected >= 1.5 ? 'text-rose-600' : 'text-amber-600'}`}>
+              ~{fmtDuration(pace.extraSeconds)} of extra usage needed at this pace
+            </span>
+          )}
+        </div>
+      )}
       <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-500">
         <span>
           budget:{' '}
@@ -73,8 +112,7 @@ function WindowCell({ title, win, source, now }: { title: string; win: SessionWi
             {effectiveSource === 'empirical' ? 'empirical' : 'static'}
           </span>
           {fallbackFired && <span className="text-slate-400"> (fallback &lt;10%)</span>}
-        </span>
-        <span>util from live headers</span>
+        </span>        
       </div>
     </div>
   )
